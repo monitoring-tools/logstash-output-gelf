@@ -6,6 +6,7 @@ describe LogStash::Outputs::Gelf do
 
   let(:host) { "localhost" }
   let(:port) { rand(1024..65535) }
+  let(:max_events_per_connection) { rand(1024..65535) }
 
   it "should register without errors" do
     plugin = LogStash::Plugin.lookup("output", "gelf").new("host" => host, "port" => port)
@@ -14,7 +15,7 @@ describe LogStash::Outputs::Gelf do
 
   describe "#send" do
 
-    subject { LogStash::Outputs::Gelf.new("host" => host, "port" => port ) }
+    subject { LogStash::Outputs::Gelf.new("host" => host, "port" => port, "max_events_per_connection" => max_events_per_connection ) }
 
     let(:properties) { { "message" => "This is a message!"} }
     let(:event)      { LogStash::Event.new(properties) }
@@ -30,6 +31,16 @@ describe LogStash::Outputs::Gelf do
                                                                     "full_message"=>"This is a message!"),
                                                      hash_including(:timestamp))
       subject.receive(event)
+    end
+
+    it "closes connection after second send" do
+      expect(subject.gelf).to receive(:addresses=).with(array_including([[host, port]]))
+
+      $i = 0
+      while $i < max_events_per_connection do
+        subject.receive(event)
+        $i +=1
+      end
     end
   end
 end

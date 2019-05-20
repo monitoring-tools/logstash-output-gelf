@@ -67,6 +67,9 @@ class LogStash::Outputs::Gelf < LogStash::Outputs::Base
   # the event message is taken instead.
   config :short_message, :validate => :string, :default => "short_message"
 
+  # Max events which have been be processed before plugin will reconnect to graylog
+  config :max_events_per_connection, :validate => :number, :default => -1
+
   public
 
   def inject_client(gelf)
@@ -117,6 +120,8 @@ class LogStash::Outputs::Gelf < LogStash::Outputs::Base
       "alert" => 1, "a" => 1,
       "emergency" => 0, "e" => 0,
      }
+
+     @events_processed = 0
   end # def register
 
   public
@@ -143,7 +148,7 @@ class LogStash::Outputs::Gelf < LogStash::Outputs::Base
 
     if @ship_metadata
       event.to_hash.each do |name, value|
-        next if value == nil
+        next if value.nil?
         next if name == "message"
 
         # Trim leading '_' in the event
@@ -196,6 +201,15 @@ class LogStash::Outputs::Gelf < LogStash::Outputs::Base
     rescue
       @logger.warn("Trouble sending GELF event", :gelf_event => m,
                    :event => event, :error => $!)
+    end
+
+    if @max_events_per_connection > 0
+        @events_processed += 1
+        if @events_processed >= @max_events_per_connection
+            @logger.info("Connection max events reached, reconnecting...")
+            @events_processed = 0
+            @gelf.addresses = [[host, port]]
+        end
     end
   end # def receive
 end # class LogStash::Outputs::Gelf
